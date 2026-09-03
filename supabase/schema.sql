@@ -5,3 +5,4 @@
 \i migrations/004_safe_member_removal.sql
 \i migrations/005_merge_duplicate_member.sql
 \i migrations/006_correct_merge_rounding.sql
+\i migrations/007_admin_expense_editing.sql
