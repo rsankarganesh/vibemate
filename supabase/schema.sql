@@ -3,3 +3,4 @@
 \i migrations/002_live_pilot.sql
 \i migrations/003_admin_and_expense_management.sql
 \i migrations/004_safe_member_removal.sql
+\i migrations/005_merge_duplicate_member.sql
