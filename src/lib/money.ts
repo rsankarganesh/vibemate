@@ -1,0 +1,2 @@
+export const formatMoney=(cents:number,currency='AUD')=>new Intl.NumberFormat('en-AU',{style:'currency',currency}).format(cents/100);
+export const parseMoney=(value:string)=>{if(!/^\d+(\.\d{0,2})?$/.test(value.trim()))throw new Error('Enter a valid amount');const [whole,decimal='']=value.split('.');const cents=Number(whole)*100+Number(decimal.padEnd(2,'0'));if(!Number.isSafeInteger(cents)||cents<=0)throw new Error('Amount must be greater than zero');return cents};

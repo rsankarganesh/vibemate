@@ -1,0 +1,1 @@
+export function Logo({compact=false,inverse=false}:{compact?:boolean;inverse?:boolean}){return <div className="logo" aria-label="VibeMate"><span className="brandmark"><i>V</i><b>M</b></span>{!compact&&<span className="wordmark" style={{color:inverse?'white':undefined}}>Vibe<span>Mate</span><small>Find your vibe. Meet your tribe.</small></span>}</div>}

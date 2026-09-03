@@ -1,0 +1,2 @@
+-- Demo data intentionally lives in the browser fixture, never in production.
+-- This file is reserved for opt-in local development seed records.
