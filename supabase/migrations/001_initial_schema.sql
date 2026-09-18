@@ -1,4 +1,4 @@
--- VibeMate Pilot V1. Browser-held member tokens are bearer credentials. Only hashes
+-- Vibemates Pilot V1. Browser-held member tokens are bearer credentials. Only hashes
 -- are stored, direct anonymous table access is denied, and mutations use RPCs.
 create extension if not exists pgcrypto;
 create table public.vibes(id uuid primary key default gen_random_uuid(),name text not null check(char_length(name) between 2 and 80),emoji text,vibe_type text not null,description text,starts_at timestamptz,ends_at timestamptz,location_label text,currency char(3) not null default 'AUD',max_members integer not null default 10 check(max_members between 2 and 1000),admin_member_id uuid,is_archived boolean not null default false,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
