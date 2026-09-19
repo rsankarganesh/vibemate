@@ -7,13 +7,13 @@ import { formatMoney } from './lib/money';
 import { go } from './lib/router';
 import { getMemberships } from './lib/storage';
 import { normalizeMobile } from './lib/phone';
-import { addLiveMember, archiveLiveVibe, recalculateLiveSplits, removeLiveMember } from './services/vibe-service';
+import { addLiveMember, archiveLiveVibe, recalculateLiveSplits, removeLiveMember, setLiveMemberPhone } from './services/vibe-service';
 import type { Vibe } from './types';
 
 const Head = () => <header className="topbar"><button className="icon-btn" aria-label="Back to vibes" onClick={() => go('/vibes')}>←</button><Logo /><span className="demo-badge live-badge">Live</span></header>;
 
 export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => Promise<void> }) {
-  const [open, setOpen] = useState(false), [name, setName] = useState(''), [phone, setPhone] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false), [name, setName] = useState(''), [phone, setPhone] = useState(''), [editingPhone, setEditingPhone] = useState(''), [memberPhone, setMemberPhone] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const membership = getMemberships().find((item) => item.vibeId === vibe.id)!;
   const admin = vibe.members.find((member) => member.id === 'alex')?.isAdmin;
   const balances = calculateBalances(vibe.members.map((member) => member.id), vibe.expenses, vibe.settlements);
@@ -41,7 +41,7 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
     </form>}
     <div className="member-list">{vibe.members.map((member) => { const balance = balances.find((item) => item.memberId === member.id)!; return <article className="member-row" key={member.id}>
       <span className="member-avatar" style={{ background: member.color }}>{member.initials}</span>
-      <div><strong>{member.name} {member.isAdmin && <small className="admin"><Crown />Admin</small>}</strong><p>{member.claimed ? 'Joined Vibemates' : 'Added by Admin'}</p></div>
+      <div><strong>{member.name} {member.isAdmin && <small className="admin"><Crown />Admin</small>}</strong><p>{member.claimed ? 'Joined Vibemates' : 'Waiting for mobile verification'}</p>{admin && !member.claimed && (editingPhone===member.id ? <form className="inline-phone" onSubmit={async event=>{event.preventDefault();if(busy)return;setBusy(true);setError('');try{await setLiveMemberPhone(membership,member.id,normalizeMobile(memberPhone,'AU'));setEditingPhone('');setMemberPhone('');await onRefresh();}catch(caught){setError(caught instanceof Error?caught.message:'Couldn’t save mobile number');}finally{setBusy(false);}}}><input autoFocus required inputMode="tel" placeholder="0412 345 678" value={memberPhone} onChange={event=>setMemberPhone(event.target.value)}/><button className="secondary small" disabled={busy}>Save mobile</button></form> : <button className="text-btn" onClick={()=>{setEditingPhone(member.id);setMemberPhone('');}}>Add or change mobile</button>)}</div>
       <span><small>Paid {formatMoney(vibe.expenses.filter(expense => !expense.deletedAt && expense.paidBy === member.id).reduce((sum, expense) => sum + expense.amountCents, 0))}</small><strong className={balance.balanceCents >= 0 ? 'positive' : 'negative'}>{balance.balanceCents >= 0 ? 'Gets back' : 'Owes'} {formatMoney(Math.abs(balance.balanceCents))}</strong>{admin && !member.isAdmin && <button className="text-btn danger" onClick={() => remove(member.id, member.name)}><Trash2 />Remove</button>}</span>
     </article>; })}</div>
     {admin && <section className="danger-zone"><h2>Admin controls</h2><p>If every expense includes everyone, repair all fair shares after changing the member list.</p><button className="secondary full" onClick={recalculate}><RefreshCw />Recalculate all expenses equally</button><p>Archive a duplicate or finished vibe without erasing its history.</p><button className="secondary full danger" onClick={archive}><Archive />Archive this vibe</button></section>}
