@@ -7,7 +7,7 @@ import { formatMoney } from './lib/money';
 import { go } from './lib/router';
 import { getMemberships } from './lib/storage';
 import { normalizeMobile } from './lib/phone';
-import { addLiveMember, archiveLiveVibe, recalculateLiveSplits, removeLiveMember, setLiveMemberPhone } from './services/vibe-service';
+import { addLiveMember, archiveLiveVibe, deleteLiveVibe, leaveLiveVibe, recalculateLiveSplits, removeLiveMember, setLiveMemberPhone } from './services/vibe-service';
 import type { Vibe } from './types';
 
 const Head = () => <header className="topbar"><button className="icon-btn" aria-label="Back to vibes" onClick={() => go('/vibes')}>←</button><Logo /><span className="demo-badge live-badge">Live</span></header>;
@@ -32,6 +32,17 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
     try { await archiveLiveVibe(membership); await onRefresh(); go('/vibes'); }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t archive vibe'); }
   };
+  const leave = async () => {
+    if (!confirm(`Leave “${vibe.name}”? Your expense history stays, but this account will lose access.`)) return;
+    try { await leaveLiveVibe(membership); go('/vibes'); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t leave vibe'); }
+  };
+  const deleteVibe = async () => {
+    const typed = prompt(`Permanently delete “${vibe.name}” and all expenses, settlements and history? Type the exact vibe name.`);
+    if (typed !== vibe.name) return;
+    try { await deleteLiveVibe(membership); go('/vibes'); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t delete vibe'); }
+  };
   return <><Head /><main className="page subpage">
     <p className="eyebrow">{vibe.emoji} {vibe.name}</p><VibeTabs id={vibe.id}/>
     <div className="title-action"><h1>{vibe.members.length} mates</h1>{admin && <button className="primary small" onClick={() => setOpen(!open)}><UserPlus />Add mate</button>}</div>
@@ -44,7 +55,7 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
       <div><strong>{member.name} {member.isAdmin && <small className="admin"><Crown />Admin</small>}</strong><p>{member.claimed ? 'Joined Vibemates' : 'Waiting for mobile verification'}</p>{admin && !member.claimed && (editingPhone===member.id ? <form className="inline-phone" onSubmit={async event=>{event.preventDefault();if(busy)return;setBusy(true);setError('');try{await setLiveMemberPhone(membership,member.id,normalizeMobile(memberPhone,'AU'));setEditingPhone('');setMemberPhone('');await onRefresh();}catch(caught){setError(caught instanceof Error?caught.message:'Couldn’t save mobile number');}finally{setBusy(false);}}}><input autoFocus required inputMode="tel" placeholder="0412 345 678" value={memberPhone} onChange={event=>setMemberPhone(event.target.value)}/><button className="secondary small" disabled={busy}>Save mobile</button></form> : <button className="text-btn" onClick={()=>{setEditingPhone(member.id);setMemberPhone('');}}>Add or change mobile</button>)}</div>
       <span><small>Paid {formatMoney(vibe.expenses.filter(expense => !expense.deletedAt && expense.paidBy === member.id).reduce((sum, expense) => sum + expense.amountCents, 0))}</small><strong className={balance.balanceCents >= 0 ? 'positive' : 'negative'}>{balance.balanceCents >= 0 ? 'Gets back' : 'Owes'} {formatMoney(Math.abs(balance.balanceCents))}</strong>{admin && !member.isAdmin && <button className="text-btn danger" onClick={() => remove(member.id, member.name)}><Trash2 />Remove</button>}</span>
     </article>; })}</div>
-    {admin && <section className="danger-zone"><h2>Admin controls</h2><p>If every expense includes everyone, repair all fair shares after changing the member list.</p><button className="secondary full" onClick={recalculate}><RefreshCw />Recalculate all expenses equally</button><p>Archive a duplicate or finished vibe without erasing its history.</p><button className="secondary full danger" onClick={archive}><Archive />Archive this vibe</button></section>}
+    {admin ? <section className="danger-zone"><h2>Admin controls</h2><p>If every expense includes everyone, repair all fair shares after changing the member list.</p><button className="secondary full" onClick={recalculate}><RefreshCw />Recalculate all expenses equally</button><p>Archive a finished vibe while keeping its history.</p><button className="secondary full" onClick={archive}><Archive />Archive this vibe</button><p>Permanently remove the group, expenses and history for everyone.</p><button className="secondary full danger" onClick={deleteVibe}><Trash2 />Delete vibe permanently</button></section> : <section className="danger-zone"><h2>Your membership</h2><p>Leaving removes this vibe from your account. Your historical expenses and balance remain visible to the group.</p><button className="secondary full danger" onClick={leave}>Leave this vibe</button></section>}
   </main><BottomNav inside onAdd={() => go(`/vibe/${vibe.id}/add`)} /></>;
 }
 

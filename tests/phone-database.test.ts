@@ -19,13 +19,14 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon,authenticated;`);
   await db.query('insert into auth.users values ($1,$2,now()),($3,$4,now()),($5,$6,null)', [alice, '+61412345678', bob, '+61412345679', unverified, '+61412345670']);
   const paths = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  for (const path of paths.filter(file => !file.startsWith('008') && !file.startsWith('009') && !file.startsWith('010') && !file.startsWith('011'))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
+  for (const path of paths.filter(file => !file.startsWith('008') && !file.startsWith('009') && !file.startsWith('010') && !file.startsWith('011') && !file.startsWith('012'))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
   const result = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Legacy trip','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", [secret, invite]);
   legacy = result.rows[0].value;
   await db.exec(await readFile('supabase/migrations/008_phone_accounts.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/009_optional_multi_currency.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/010_phone_member_invites.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/011_update_member_mobile.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/012_delete_and_leave_vibe.sql', 'utf8'));
 }, 30000);
 afterAll(async () => {await db.close();});
 it('rejects anonymous RPC access after the phone migration', async () => {
