@@ -22,7 +22,12 @@ export async function syncPhoneMemberships(userId: string, isCurrent: () => bool
   for (const item of cached.filter(item => item.memberToken)) {
     if (!isCurrent()) return;
     const {error} = await client().rpc('link_phone_membership', {p_member: item.memberId, p_token: item.memberToken});
-    if (error) throw new Error('Couldn’t link your existing vibes. Apply the phone-account migration and try again. Your saved access has been kept.');
+    if (error) {
+      // Old browser storage can contain expired, deleted, or already reassigned
+      // bearer memberships. One stale entry must not block the verified account.
+      const stale = error.message.includes('not_authorized') || error.message.includes('membership_unavailable');
+      if (!stale) throw new Error(`Couldn’t link your existing vibes: ${error.message}`);
+    }
   }
   const {data, error} = await client().rpc('list_phone_memberships');
   if (error) throw new Error('Couldn’t load your phone account. Check the connection and ensure migration 008 is installed.');
