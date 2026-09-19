@@ -3,7 +3,11 @@ import {getMemberships, type StoredMembership} from '../lib/storage';
 const client = () => {if (!supabase) throw new Error('SMS sign-in needs a live connection.'); return supabase;};
 export async function sendPhoneCode(phone: string, name: string) {
   const {error} = await client().auth.signInWithOtp({phone, options: {data: {display_name: name}}});
-  if (error) throw new Error(error.status === 429 ? 'Please wait before requesting another code.' : 'Couldn’t send a code. Check the number and try again. Phone sign-in and an SMS provider must be enabled.');
+  if (error) {
+    if (error.status === 429) throw new Error('Please wait before requesting another code.');
+    const detail = error.message?.trim();
+    throw new Error(detail ? `Couldn’t send a code: ${detail}` : 'Couldn’t send a code. Check the number and try again.');
+  }
 }
 export async function verifyPhoneCode(phone: string, token: string, name: string) {
   const {data, error} = await client().auth.verifyOtp({phone, token, type: 'sms'});
