@@ -19,11 +19,12 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon,authenticated;`);
   await db.query('insert into auth.users values ($1,$2,now()),($3,$4,now()),($5,$6,null)', [alice, '+61412345678', bob, '+61412345679', unverified, '+61412345670']);
   const paths = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  for (const path of paths.filter(file => !file.startsWith('008') && !file.startsWith('009'))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
+  for (const path of paths.filter(file => !file.startsWith('008') && !file.startsWith('009') && !file.startsWith('010'))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
   const result = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Legacy trip','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", [secret, invite]);
   legacy = result.rows[0].value;
   await db.exec(await readFile('supabase/migrations/008_phone_accounts.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/009_optional_multi_currency.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/010_phone_member_invites.sql', 'utf8'));
 }, 30000);
 afterAll(async () => {await db.close();});
 it('rejects anonymous RPC access after the phone migration', async () => {
@@ -73,6 +74,15 @@ it('binds new creators and claimed manual members, and keeps other members out o
   await db.query("select save_expense_with_splits($1,$2,'','Tiny bill',3,$2,'Other','2026-09-17',null,$3::jsonb)", [group.vibe_id, manual, JSON.stringify(shares)]);
   const snapshot = await db.query<{value: {expenses: {splits: {member_id: string; share_cents: number}[]}[]}}>('select get_vibe_snapshot($1,$2,$3) as value', [group.vibe_id, manual, '']);
   expect(snapshot.rows[0].value.expenses[0].splits).toEqual(expect.arrayContaining(shares));
+});
+it('automatically claims an admin-added membership for the matching verified mobile', async () => {
+  await identity(alice);
+  const created = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Phone invites','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", ['k'.repeat(64), 'l'.repeat(64)]);
+  await db.query('select add_member_with_phone($1,$2,$3,$4,$5)', [created.rows[0].value.vibe_id, created.rows[0].value.member_id, '', 'Bob', '+61412345679']);
+  await identity(bob);
+  expect((await db.query<{value: number}>('select claim_phone_memberships() as value')).rows[0].value).toBe(1);
+  const memberships = await db.query<{value: {vibe_id: string}[]}>('select list_phone_memberships() as value');
+  expect(memberships.rows[0].value).toEqual(expect.arrayContaining([{vibe_id: created.rows[0].value.vibe_id, member_id: expect.any(String)}]));
 });
 
 it('keeps AUD as the ledger currency and validates stored foreign conversions', async () => {

@@ -6,13 +6,14 @@ import { calculateBalances } from './lib/finance';
 import { formatMoney } from './lib/money';
 import { go } from './lib/router';
 import { getMemberships } from './lib/storage';
+import { normalizeMobile } from './lib/phone';
 import { addLiveMember, archiveLiveVibe, recalculateLiveSplits, removeLiveMember } from './services/vibe-service';
 import type { Vibe } from './types';
 
 const Head = () => <header className="topbar"><button className="icon-btn" aria-label="Back to vibes" onClick={() => go('/vibes')}>←</button><Logo /><span className="demo-badge live-badge">Live</span></header>;
 
 export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => Promise<void> }) {
-  const [open, setOpen] = useState(false), [name, setName] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false), [name, setName] = useState(''), [phone, setPhone] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const membership = getMemberships().find((item) => item.vibeId === vibe.id)!;
   const admin = vibe.members.find((member) => member.id === 'alex')?.isAdmin;
   const balances = calculateBalances(vibe.members.map((member) => member.id), vibe.expenses, vibe.settlements);
@@ -35,8 +36,8 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
     <p className="eyebrow">{vibe.emoji} {vibe.name}</p><VibeTabs id={vibe.id}/>
     <div className="title-action"><h1>{vibe.members.length} mates</h1>{admin && <button className="primary small" onClick={() => setOpen(!open)}><UserPlus />Add mate</button>}</div>
     {error && <p className="form-error">{error}</p>}
-    {open && <form className="panel stack" onSubmit={async (event) => { event.preventDefault(); if (busy) return; if (name.trim().length < 2) return setError('Enter at least two characters.'); setBusy(true); setError(''); try { await addLiveMember(membership, name.trim()); setName(''); setOpen(false); await onRefresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t add member'); } finally {setBusy(false);} }}>
-      <label>Mate’s name<input required minLength={2} maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Priya" /></label><button className="primary" disabled={busy}>{busy ? 'Adding…' : 'Add member'}</button>
+    {open && <form className="panel stack" onSubmit={async (event) => { event.preventDefault(); if (busy) return; if (name.trim().length < 2) return setError('Enter at least two characters.'); setBusy(true); setError(''); try { const mobile=normalizeMobile(phone,'AU'); await addLiveMember(membership, name.trim(), mobile); setName(''); setPhone(''); setOpen(false); await onRefresh(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t add member'); } finally {setBusy(false);} }}>
+      <p className="helper">They’ll automatically see this vibe after verifying this mobile number.</p><label>Mate’s name<input required minLength={2} maxLength={60} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Priya" /></label><label>Mobile number<input required inputMode="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="e.g. 0412 345 678" /></label><button className="primary" disabled={busy}>{busy ? 'Adding…' : 'Add member'}</button>
     </form>}
     <div className="member-list">{vibe.members.map((member) => { const balance = balances.find((item) => item.memberId === member.id)!; return <article className="member-row" key={member.id}>
       <span className="member-avatar" style={{ background: member.color }}>{member.initials}</span>

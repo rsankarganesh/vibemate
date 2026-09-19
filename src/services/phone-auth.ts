@@ -29,6 +29,8 @@ export async function syncPhoneMemberships(userId: string, isCurrent: () => bool
       if (!stale) throw new Error(`Couldn’t link your existing vibes: ${error.message}`);
     }
   }
+  const {error: claimError} = await client().rpc('claim_phone_memberships');
+  if (claimError) throw new Error(`Couldn’t connect mobile invitations: ${claimError.message}`);
   const {data, error} = await client().rpc('list_phone_memberships');
   if (error) throw new Error('Couldn’t load your phone account. Check the connection and ensure migration 008 is installed.');
   if (!isCurrent()) return;
