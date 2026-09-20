@@ -6,7 +6,7 @@ import {joinLiveVibe, loadLiveVibe, previewInvite, settleLive} from '../src/serv
 import {syncCurrentPhoneMemberships} from '../src/services/phone-auth';
 
 vi.mock('../src/services/vibe-service', () => ({
-  createLiveVibe: vi.fn(), deleteLiveExpense: vi.fn(), joinLiveVibe: vi.fn(), loadLiveVibe: vi.fn(), previewInvite: vi.fn(), saveLiveExpense: vi.fn(), settleLive: vi.fn(), updateLiveExpense: vi.fn(),
+  addLiveAlbum: vi.fn(), createLiveVibe: vi.fn(), deleteLiveExpense: vi.fn(), joinLiveVibe: vi.fn(), loadLiveVibe: vi.fn(), previewInvite: vi.fn(), removeLiveAlbum: vi.fn(), saveLiveExpense: vi.fn(), setLiveRsvp: vi.fn(), settleLive: vi.fn(), updateLiveExpense: vi.fn(), updateLiveOverview: vi.fn(),
 }));
 vi.mock('../src/services/phone-auth', () => ({syncCurrentPhoneMemberships: vi.fn()}));
 const membership = {vibeId: 'drinks', memberId: 'test-member', memberToken: 'test-token'};

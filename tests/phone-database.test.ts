@@ -19,7 +19,7 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon,authenticated;`);
   await db.query('insert into auth.users values ($1,$2,now()),($3,$4,now()),($5,$6,null)', [alice, '+61412345678', bob, '+61412345679', unverified, '+61412345670']);
   const paths = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  for (const path of paths.filter(file => !/^0(08|09|10|11|12|13)_/.test(file))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
+  for (const path of paths.filter(file => !/^0(08|09|10|11|12|13|14)_/.test(file))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
   const result = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Legacy trip','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", [secret, invite]);
   legacy = result.rows[0].value;
   await db.exec(await readFile('supabase/migrations/008_phone_accounts.sql', 'utf8'));
@@ -28,6 +28,7 @@ beforeAll(async () => {
   await db.exec(await readFile('supabase/migrations/011_update_member_mobile.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/012_delete_and_leave_vibe.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/013_phone_identity_deduplication.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/014_vibe_overview_and_albums.sql', 'utf8'));
 }, 30000);
 afterAll(async () => {await db.close();});
 it('rejects anonymous RPC access after the phone migration', async () => {
@@ -107,6 +108,17 @@ it('merges a legacy duplicate into the admin-named member for the same phone', a
   expect(members.rows).toEqual([{id: reserved.rows[0].value, display_name: 'Robert', user_id: bob}]);
   const splits = await db.query<{member_id: string;share_cents: number}>('select member_id,share_cents from expense_splits where expense_id=$1', [expense.rows[0].id]);
   expect(splits.rows).toEqual([{member_id: reserved.rows[0].value, share_cents: 101}]);
+});
+
+it('stores overview details, RSVP and shared album links without storing photos', async () => {
+  await identity(alice);
+  await db.query("select update_vibe_overview($1,$2,'','2026-10-02T06:00:00Z','Bribie Island','Beach BBQ','https://example.com/cover.jpg','Bring sunscreen')", [legacy.vibe_id, legacy.member_id]);
+  await db.query("select set_vibe_rsvp($1,$2,'','going')", [legacy.vibe_id, legacy.member_id]);
+  const album = await db.query<{value:string}>("select add_shared_album($1,$2,'','Beach memories','google_photos','https://photos.app.goo.gl/example','https://example.com/album.jpg',127,8) as value", [legacy.vibe_id, legacy.member_id]);
+  const snapshot = await db.query<{value:{vibe:{location:string;type:string;cover_image_url:string;announcement:string};rsvps:Array<{member_id:string;status:string}>;albums:Array<{id:string;title:string;photo_count:number;video_count:number;added_by_name:string}>}}>('select get_vibe_snapshot($1,$2,$3) as value', [legacy.vibe_id, legacy.member_id, '']);
+  expect(snapshot.rows[0].value.vibe).toMatchObject({location:'Bribie Island',type:'Beach BBQ',cover_image_url:'https://example.com/cover.jpg',announcement:'Bring sunscreen'});
+  expect(snapshot.rows[0].value.rsvps).toEqual([{member_id:legacy.member_id,status:'going'}]);
+  expect(snapshot.rows[0].value.albums).toEqual([expect.objectContaining({id:album.rows[0].value,title:'Beach memories',photo_count:127,video_count:8,added_by_name:'Alice'})]);
 });
 
 it('keeps AUD as the ledger currency and validates stored foreign conversions', async () => {
