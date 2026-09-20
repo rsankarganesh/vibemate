@@ -2,11 +2,12 @@ import {cleanup, fireEvent, render, screen, waitFor} from '@testing-library/reac
 import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {demoVibes} from '../src/services/demo-service';
 import LiveApp from '../src/LiveApp';
+import {LiveMembers} from '../src/LiveVibePages';
 import {joinLiveVibe, loadLiveVibe, previewInvite, settleLive} from '../src/services/vibe-service';
 import {syncCurrentPhoneMemberships} from '../src/services/phone-auth';
 
 vi.mock('../src/services/vibe-service', () => ({
-  addLiveAlbum: vi.fn(), createLiveVibe: vi.fn(), deleteLiveExpense: vi.fn(), joinLiveVibe: vi.fn(), loadLiveVibe: vi.fn(), previewInvite: vi.fn(), removeLiveAlbum: vi.fn(), saveLiveExpense: vi.fn(), setLiveRsvp: vi.fn(), settleLive: vi.fn(), updateLiveExpense: vi.fn(), updateLiveOverview: vi.fn(),
+  addLiveAlbum: vi.fn(), addLiveMember: vi.fn(), archiveLiveVibe: vi.fn(), createLiveVibe: vi.fn(), deleteLiveExpense: vi.fn(), deleteLiveVibe: vi.fn(), joinLiveVibe: vi.fn(), leaveLiveVibe: vi.fn(), loadLiveVibe: vi.fn(), previewInvite: vi.fn(), recalculateLiveSplits: vi.fn(), removeLiveAlbum: vi.fn(), removeLiveMember: vi.fn(), saveLiveExpense: vi.fn(), setLiveMemberPhone: vi.fn(), setLiveRsvp: vi.fn(), settleLive: vi.fn(), updateLiveExpense: vi.fn(), updateLiveOverview: vi.fn(),
 }));
 vi.mock('../src/services/phone-auth', () => ({syncCurrentPhoneMemberships: vi.fn()}));
 const membership = {vibeId: 'drinks', memberId: 'test-member', memberToken: 'test-token'};
@@ -56,4 +57,15 @@ it('keeps payment confirmation available when recording fails', async () => {
   expect(await screen.findByRole('status')).toHaveTextContent('Connection lost. Try again.');
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(screen.getByRole('button', {name: 'Confirm payment received'})).toBeEnabled();
+});
+
+it('uses an in-app confirmation before permanently deleting a vibe', async () => {
+  localStorage.setItem('vibemate-memberships', JSON.stringify({memberships: [membership]}));
+  render(<LiveMembers vibe={structuredClone(demoVibes[1])} onRefresh={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('button', {name: 'Delete vibe permanently'}));
+  expect(screen.getByRole('dialog', {name: 'Delete this vibe permanently?'})).toBeInTheDocument();
+  const confirmButton = screen.getAllByRole('button', {name: 'Delete vibe permanently'}).at(-1)!;
+  expect(confirmButton).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/Type .* to confirm/), {target: {value: demoVibes[1].name}});
+  expect(confirmButton).toBeEnabled();
 });

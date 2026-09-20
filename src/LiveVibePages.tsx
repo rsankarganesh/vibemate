@@ -2,6 +2,7 @@ import { Archive, Crown, RefreshCw, Trash2, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { BottomNav, VibeTabs } from './components/Nav';
 import { Logo } from './components/Logo';
+import { Modal } from './components/Modal';
 import { calculateBalances } from './lib/finance';
 import { formatMoney } from './lib/money';
 import { go } from './lib/router';
@@ -13,7 +14,7 @@ import type { Vibe } from './types';
 const Head = () => <header className="topbar"><button className="icon-btn" aria-label="Back to vibes" onClick={() => go('/vibes')}>←</button><Logo /><span className="demo-badge live-badge">Live</span></header>;
 
 export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => Promise<void> }) {
-  const [open, setOpen] = useState(false), [name, setName] = useState(''), [phone, setPhone] = useState(''), [editingPhone, setEditingPhone] = useState(''), [memberPhone, setMemberPhone] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false), [name, setName] = useState(''), [phone, setPhone] = useState(''), [editingPhone, setEditingPhone] = useState(''), [memberPhone, setMemberPhone] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [deleteOpen, setDeleteOpen] = useState(false), [deleteName, setDeleteName] = useState('');
   const membership = getMemberships().find((item) => item.vibeId === vibe.id)!;
   const admin = vibe.members.find((member) => member.id === 'alex')?.isAdmin;
   const balances = calculateBalances(vibe.members.map((member) => member.id), vibe.expenses, vibe.settlements);
@@ -38,10 +39,10 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t leave vibe'); }
   };
   const deleteVibe = async () => {
-    const typed = prompt(`Permanently delete “${vibe.name}” and all expenses, settlements and history? Type the exact vibe name.`);
-    if (typed !== vibe.name) return;
-    try { await deleteLiveVibe(membership); go('/vibes'); }
+    if (deleteName !== vibe.name || busy) return;
+    try { setBusy(true); setError(''); await deleteLiveVibe(membership); go('/vibes'); }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Couldn’t delete vibe'); }
+    finally { setBusy(false); }
   };
   return <><Head /><main className="page subpage">
     <p className="eyebrow">{vibe.emoji} {vibe.name}</p><VibeTabs id={vibe.id}/>
@@ -55,8 +56,8 @@ export function LiveMembers({ vibe, onRefresh }: { vibe: Vibe; onRefresh: () => 
       <div><strong>{member.name} {member.isAdmin && <small className="admin"><Crown />Admin</small>}</strong><p>{member.claimed ? 'Joined Vibemates' : 'Waiting for mobile verification'}</p>{admin && !member.claimed && (editingPhone===member.id ? <form className="inline-phone" onSubmit={async event=>{event.preventDefault();if(busy)return;setBusy(true);setError('');try{await setLiveMemberPhone(membership,member.id,normalizeMobile(memberPhone,'AU'));setEditingPhone('');setMemberPhone('');await onRefresh();}catch(caught){setError(caught instanceof Error?caught.message:'Couldn’t save mobile number');}finally{setBusy(false);}}}><input autoFocus required inputMode="tel" placeholder="0412 345 678" value={memberPhone} onChange={event=>setMemberPhone(event.target.value)}/><button className="secondary small" disabled={busy}>Save mobile</button></form> : <button className="text-btn" onClick={()=>{setEditingPhone(member.id);setMemberPhone('');}}>Add or change mobile</button>)}</div>
       <span><small>Paid {formatMoney(vibe.expenses.filter(expense => !expense.deletedAt && expense.paidBy === member.id).reduce((sum, expense) => sum + expense.amountCents, 0))}</small><strong className={balance.balanceCents >= 0 ? 'positive' : 'negative'}>{balance.balanceCents >= 0 ? 'Gets back' : 'Owes'} {formatMoney(Math.abs(balance.balanceCents))}</strong>{admin && !member.isAdmin && <button className="text-btn danger" onClick={() => remove(member.id, member.name)}><Trash2 />Remove</button>}</span>
     </article>; })}</div>
-    {admin ? <section className="danger-zone"><h2>Admin controls</h2><p>If every expense includes everyone, repair all fair shares after changing the member list.</p><button className="secondary full" onClick={recalculate}><RefreshCw />Recalculate all expenses equally</button><p>Archive a finished vibe while keeping its history.</p><button className="secondary full" onClick={archive}><Archive />Archive this vibe</button><p>Permanently remove the group, expenses and history for everyone.</p><button className="secondary full danger" onClick={deleteVibe}><Trash2 />Delete vibe permanently</button></section> : <section className="danger-zone"><h2>Your membership</h2><p>Leaving removes this vibe from your account. Your historical expenses and balance remain visible to the group.</p><button className="secondary full danger" onClick={leave}>Leave this vibe</button></section>}
-  </main><BottomNav inside onAdd={() => go(`/vibe/${vibe.id}/add`)} /></>;
+    {admin ? <section className="danger-zone"><h2>Admin controls</h2><p>If every expense includes everyone, repair all fair shares after changing the member list.</p><button className="secondary full" onClick={recalculate}><RefreshCw />Recalculate all expenses equally</button><p>Archive a finished vibe while keeping its history.</p><button className="secondary full" onClick={archive}><Archive />Archive this vibe</button><p>Permanently remove the group, expenses and history for everyone.</p><button className="secondary full danger" onClick={() => { setDeleteName(''); setDeleteOpen(true); }}><Trash2 />Delete vibe permanently</button></section> : <section className="danger-zone"><h2>Your membership</h2><p>Leaving removes this vibe from your account. Your historical expenses and balance remain visible to the group.</p><button className="secondary full danger" onClick={leave}>Leave this vibe</button></section>}
+  </main><BottomNav inside onAdd={() => go(`/vibe/${vibe.id}/add`)} />{deleteOpen && <Modal title="Delete this vibe permanently?" onClose={() => { if (!busy) setDeleteOpen(false); }}><form className="stack" onSubmit={(event) => { event.preventDefault(); void deleteVibe(); }}><p>This removes <strong>{vibe.name}</strong>, all expenses, settlements, albums and activity for every member. This cannot be undone.</p><label>Type <strong>{vibe.name}</strong> to confirm<input autoFocus value={deleteName} onChange={(event) => setDeleteName(event.target.value)} autoComplete="off" /></label><button className="primary full danger" disabled={deleteName !== vibe.name || busy}>{busy ? 'Deleting…' : 'Delete vibe permanently'}</button><button type="button" className="secondary full" disabled={busy} onClick={() => setDeleteOpen(false)}>Keep this vibe</button></form></Modal>}</>;
 }
 
 export function LiveActivity({ vibe }: { vibe: Vibe }) {
