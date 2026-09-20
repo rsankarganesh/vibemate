@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, ChevronRight, Pencil, Plus, Share2, ShieldCheck, Trash2 } from 'lucide-react';
 import {SettlementPlanner} from './components/SettlementPlanner';
 import { Logo } from './components/Logo';
@@ -10,6 +10,7 @@ import { calculateBalances, suggestSettlements } from './lib/finance';
 import { formatMoney } from './lib/money';
 import { getMemberships, type StoredMembership } from './lib/storage';
 import { go, parseHash } from './lib/router';
+import {syncCurrentPhoneMemberships} from './services/phone-auth';
 import { createLiveVibe, deleteLiveExpense, joinLiveVibe, loadLiveVibe, previewInvite, saveLiveExpense, settleLive, updateLiveExpense } from './services/vibe-service';
 import type { Expense, Vibe } from './types';
 
@@ -70,7 +71,9 @@ function CreateLive({ onDone }: { onDone: (membership: StoredMembership) => void
 function JoinLive({token, onDone}: {token: string; onDone: (membership: StoredMembership) => void | Promise<void>}) {
   const [preview, setPreview] = useState<Awaited<ReturnType<typeof previewInvite>> | null>(null);
   const [name, setName] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
-  useEffect(() => {let active = true; setLoading(true); setError(''); setPreview(null); previewInvite(token).then(value => {if (active) setPreview(value);}).catch(() => {if (active) setError('This invite could not be opened. Check your connection or ask the creator for a new link.');}).finally(() => {if (active) setLoading(false);}); return () => {active = false;};}, [token]);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {onDoneRef.current=onDone;}, [onDone]);
+  useEffect(() => {let active = true; setLoading(true); setError(''); setPreview(null); const open = async () => {try {await syncCurrentPhoneMemberships(); const value=await previewInvite(token); if(!active)return; const membership=getMemberships().find(item=>item.vibeId===value.id); if(membership){await onDoneRef.current(membership);return;} setPreview(value);}catch{if(active)setError('This invite could not be opened. Check your connection or ask the creator for a new link.');}finally{if(active)setLoading(false);}}; void open(); return () => {active = false;};}, [token]);
   const join = async (displayName: string, claimId?: string) => {
     if (busy) return;
     if (displayName.trim().length < 2) return setError('Enter at least two characters for your name.');

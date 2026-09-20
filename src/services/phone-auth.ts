@@ -38,6 +38,11 @@ export async function syncPhoneMemberships(userId: string, isCurrent: () => bool
   localStorage.setItem('vibemate-memberships', JSON.stringify({version: 2, memberships}));
   localStorage.setItem('vibemates-membership-owner', userId);
 }
+export async function syncCurrentPhoneMemberships() {
+  const {data, error} = await client().auth.getUser();
+  if (error || !data.user?.phone_confirmed_at) throw new Error('Verify your mobile number to continue.');
+  await syncPhoneMemberships(data.user.id);
+}
 export async function signOutPhone() {
   const {error} = await client().auth.signOut({scope: 'local'});
   if (error) throw new Error('Couldn’t sign out. Try again.');

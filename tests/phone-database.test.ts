@@ -19,7 +19,7 @@ beforeAll(async () => {
     grant execute on function auth.uid() to anon,authenticated;`);
   await db.query('insert into auth.users values ($1,$2,now()),($3,$4,now()),($5,$6,null)', [alice, '+61412345678', bob, '+61412345679', unverified, '+61412345670']);
   const paths = (await readdir('supabase/migrations')).filter(file => file.endsWith('.sql')).sort();
-  for (const path of paths.filter(file => !file.startsWith('008') && !file.startsWith('009') && !file.startsWith('010') && !file.startsWith('011') && !file.startsWith('012'))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
+  for (const path of paths.filter(file => !/^0(08|09|10|11|12|13)_/.test(file))) await db.exec(await readFile(`supabase/migrations/${path}`, 'utf8'));
   const result = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Legacy trip','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", [secret, invite]);
   legacy = result.rows[0].value;
   await db.exec(await readFile('supabase/migrations/008_phone_accounts.sql', 'utf8'));
@@ -27,6 +27,7 @@ beforeAll(async () => {
   await db.exec(await readFile('supabase/migrations/010_phone_member_invites.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/011_update_member_mobile.sql', 'utf8'));
   await db.exec(await readFile('supabase/migrations/012_delete_and_leave_vibe.sql', 'utf8'));
+  await db.exec(await readFile('supabase/migrations/013_phone_identity_deduplication.sql', 'utf8'));
 }, 30000);
 afterAll(async () => {await db.close();});
 it('rejects anonymous RPC access after the phone migration', async () => {
@@ -55,12 +56,13 @@ it('prevents a different verified user taking over or reading that membership', 
   const result = await db.query<{value: unknown[]}>('select list_phone_memberships() as value');
   expect(result.rows[0].value).toEqual([]);
 });
-it('attaches newly joined members to their phone account and prevents duplicate joins', async () => {
+it('attaches newly joined members to their phone account and reuses the same identity', async () => {
   await identity(bob);
   const result = await db.query<{value: {member_id: string}}>('select join_vibe($1,$2,$3) as value', [invite, 'Bob', 'f'.repeat(64)]);
   const memberships = await db.query<{value: {member_id: string}[]}>('select list_phone_memberships() as value');
   expect(memberships.rows[0].value[0].member_id).toBe(result.rows[0].value.member_id);
-  await expect(db.query('select join_vibe($1,$2,$3)', [invite, 'Bob again', 'g'.repeat(64)])).rejects.toThrow(/unique constraint/);
+  const repeated = await db.query<{value: {member_id: string}}>('select join_vibe($1,$2,$3) as value', [invite, 'Bob again', 'g'.repeat(64)]);
+  expect(repeated.rows[0].value.member_id).toBe(result.rows[0].value.member_id);
 });
 it('binds new creators and claimed manual members, and keeps other members out of admin actions', async () => {
   await identity(alice);
@@ -85,6 +87,26 @@ it('automatically claims an admin-added membership for the matching verified mob
   expect((await db.query<{value: number}>('select claim_phone_memberships() as value')).rows[0].value).toBe(1);
   const memberships = await db.query<{value: {vibe_id: string}[]}>('select list_phone_memberships() as value');
   expect(memberships.rows[0].value).toEqual(expect.arrayContaining([{vibe_id: created.rows[0].value.vibe_id, member_id: expect.any(String)}]));
+});
+
+it('merges a legacy duplicate into the admin-named member for the same phone', async () => {
+  await identity(alice);
+  const created = await db.query<{value: {vibe_id: string; member_id: string}}>("select create_vibe('Duplicate repair','🌴','Trip',null,'Brisbane','AUD',10,'Alice',$1,$2) as value", ['m'.repeat(64), 'n'.repeat(64)]);
+  const vibe = created.rows[0].value;
+  const reserved = await db.query<{value: string}>('select add_member_with_phone($1,$2,$3,$4,$5) as value', [vibe.vibe_id, vibe.member_id, '', 'Robert', '+61412345679']);
+  await identity(bob);
+  await db.exec('reset role');
+  const duplicate = await db.query<{id: string}>("insert into members(vibe_id,display_name,user_id,claimed_at) values($1,'Bob',$2,now()) returning id", [vibe.vibe_id, bob]);
+  await db.query("insert into expenses(vibe_id,description,amount_cents,paid_by_member_id,category,expense_date,created_by_member_id) values($1,'Lunch',101,$2,'Food','2026-09-20',$2)", [vibe.vibe_id, duplicate.rows[0].id]);
+  const expense = await db.query<{id: string}>("select id from expenses where vibe_id=$1 and description='Lunch'", [vibe.vibe_id]);
+  await db.query('insert into expense_splits(expense_id,member_id,share_cents) values($1,$2,51),($1,$3,50)', [expense.rows[0].id, duplicate.rows[0].id, reserved.rows[0].value]);
+  await identity(bob);
+  expect((await db.query<{value: number}>('select claim_phone_memberships() as value')).rows[0].value).toBe(1);
+  await db.exec('reset role');
+  const members = await db.query<{id: string;display_name: string;user_id: string}>('select id,display_name,user_id from members where vibe_id=$1 and user_id=$2', [vibe.vibe_id, bob]);
+  expect(members.rows).toEqual([{id: reserved.rows[0].value, display_name: 'Robert', user_id: bob}]);
+  const splits = await db.query<{member_id: string;share_cents: number}>('select member_id,share_cents from expense_splits where expense_id=$1', [expense.rows[0].id]);
+  expect(splits.rows).toEqual([{member_id: reserved.rows[0].value, share_cents: 101}]);
 });
 
 it('keeps AUD as the ledger currency and validates stored foreign conversions', async () => {

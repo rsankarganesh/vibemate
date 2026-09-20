@@ -3,14 +3,17 @@ import {afterEach, beforeEach, expect, it, vi} from 'vitest';
 import {demoVibes} from '../src/services/demo-service';
 import LiveApp from '../src/LiveApp';
 import {joinLiveVibe, loadLiveVibe, previewInvite, settleLive} from '../src/services/vibe-service';
+import {syncCurrentPhoneMemberships} from '../src/services/phone-auth';
 
 vi.mock('../src/services/vibe-service', () => ({
   createLiveVibe: vi.fn(), deleteLiveExpense: vi.fn(), joinLiveVibe: vi.fn(), loadLiveVibe: vi.fn(), previewInvite: vi.fn(), saveLiveExpense: vi.fn(), settleLive: vi.fn(), updateLiveExpense: vi.fn(),
 }));
+vi.mock('../src/services/phone-auth', () => ({syncCurrentPhoneMemberships: vi.fn()}));
 const membership = {vibeId: 'drinks', memberId: 'test-member', memberToken: 'test-token'};
 beforeEach(() => {
   localStorage.clear();
   vi.resetAllMocks();
+  vi.mocked(syncCurrentPhoneMemberships).mockResolvedValue();
   vi.mocked(loadLiveVibe).mockResolvedValue(structuredClone(demoVibes[1]));
 });
 afterEach(cleanup);
@@ -33,13 +36,14 @@ it('claims an existing member instead of creating a duplicate identity', async (
   await waitFor(() => expect(joinLiveVibe).toHaveBeenCalledWith('test-invite', 'Priya', 'priya'));
 });
 
-it('opens an existing membership without allowing another join', async () => {
+it('automatically opens an existing phone membership without allowing another join', async () => {
   location.hash = '#/join/test-invite';
   localStorage.setItem('vibemate-memberships', JSON.stringify({memberships: [membership]}));
   vi.mocked(previewInvite).mockResolvedValue({id: 'drinks', name: 'Friday Drinks', emoji: '🍻', location: 'South Bank', unclaimed_members: []});
   render(<LiveApp/>);
-  expect(await screen.findByRole('button', {name: 'You’re already a member · Open vibe'})).toBeInTheDocument();
-  expect(screen.queryByRole('button', {name: 'Join the vibe'})).not.toBeInTheDocument();
+  await waitFor(() => expect(location.hash).toBe('#/vibe/drinks'));
+  expect(syncCurrentPhoneMemberships).toHaveBeenCalledOnce();
+  expect(joinLiveVibe).not.toHaveBeenCalled();
 });
 
 it('keeps payment confirmation available when recording fails', async () => {
